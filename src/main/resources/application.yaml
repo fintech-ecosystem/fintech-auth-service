@@ -1,3 +1,45 @@
 spring:
   application:
     name: fintech-auth-service
+
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:fintech_auth}
+    username: ${DB_USER:fintech}
+    password: ${DB_PASSWORD:fintech}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+server:
+  port: ${SERVER_PORT:8081}
+
+security:
+  jwt:
+    issuer: ${JWT_ISSUER:fintech-auth-service}
+    secret: ${JWT_SECRET:change-me-to-a-long-random-secret-at-least-32-chars}
+    access-token-ttl-minutes: ${ACCESS_TOKEN_TTL_MINUTES:15}
+    refresh-token-ttl-days: ${REFRESH_TOKEN_TTL_DAYS:7}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
+
+logging:
+  level:
+    root: INFO
+    kuan.fintech.fintech_auth_service: INFO
