@@ -38,6 +38,14 @@ Flyway creates:
 - `refresh_tokens`
 - `login_attempts`
 
+## JWT/OAuth2 Flow
+
+- `POST /auth/login` returns a short-lived HS256 JWT access token plus an opaque refresh token.
+- Access tokens include `iss`, `sub`, `email`, `roles`, `scope`, and `token_use=access` claims.
+- Refresh tokens are stored only as SHA-256 hashes and are rotated on every `/auth/refresh` call.
+- `/auth/logout` revokes the supplied refresh token.
+- `/auth/me` is protected by the OAuth2 resource server and only accepts valid access tokens.
+
 ## Run Locally
 
 Build the common library once:

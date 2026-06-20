@@ -8,15 +8,24 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.jayway.jsonpath.JsonPath;
+import java.time.Instant;
 import java.util.UUID;
 import kuan.fintech.common.correlation.CorrelationContext;
 import kuan.fintech.fintech_auth_service.infrastructure.persistence.repository.AuthUserJpaRepository;
 import kuan.fintech.fintech_auth_service.infrastructure.persistence.repository.RefreshTokenJpaRepository;
+import kuan.fintech.fintech_auth_service.infrastructure.security.JwtTokenProvider;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
+import org.springframework.security.oauth2.jwt.JwsHeader;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.jwt.JwtClaimsSet;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.jwt.JwtEncoder;
+import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
@@ -34,6 +43,12 @@ class FintechAuthServiceApplicationTests {
 
 	@Autowired
 	private RefreshTokenJpaRepository refreshTokenRepository;
+
+	@Autowired
+	private JwtDecoder jwtDecoder;
+
+	@Autowired
+	private JwtEncoder jwtEncoder;
 
 	@Test
 	void contextLoads() throws Exception {
@@ -95,7 +110,16 @@ class FintechAuthServiceApplicationTests {
 				.andExpect(jsonPath("$.data.expiresIn").value(900))
 				.andReturn();
 
+		String accessToken = readToken(loginResult, "accessToken");
 		String refreshToken = JsonPath.read(loginResult.getResponse().getContentAsString(), "$.data.refreshToken");
+		Jwt jwt = jwtDecoder.decode(accessToken);
+
+		assertThat(jwt.getClaimAsString("iss")).isEqualTo("fintech-auth-service");
+		assertThat(jwt.getSubject()).isNotBlank();
+		assertThat(jwt.getClaimAsString("email")).isEqualTo(email);
+		assertThat(jwt.getClaimAsStringList("roles")).containsExactly("CUSTOMER");
+		assertThat(jwt.getClaimAsString("scope")).isEqualTo("ROLE_CUSTOMER");
+		assertThat(jwt.getClaimAsString("token_use")).isEqualTo(JwtTokenProvider.TOKEN_USE_ACCESS);
 
 		assertThat(refreshTokenRepository.findAll())
 				.anySatisfy(savedToken -> {
@@ -180,6 +204,15 @@ class FintechAuthServiceApplicationTests {
 				.andExpect(jsonPath("$.data.roles[0]").value("CUSTOMER"));
 	}
 
+	@Test
+	void meRejectsJwtWithoutAccessTokenUseClaim() throws Exception {
+		String token = signedJwtWithoutTokenUse();
+
+		mockMvc.perform(get("/auth/me")
+						.header("Authorization", "Bearer " + token))
+				.andExpect(status().isUnauthorized());
+	}
+
 	private void register(String email, String password) throws Exception {
 		mockMvc.perform(post("/auth/register")
 						.contentType(MediaType.APPLICATION_JSON)
@@ -199,6 +232,22 @@ class FintechAuthServiceApplicationTests {
 
 	private String readToken(MvcResult result, String tokenName) throws Exception {
 		return JsonPath.read(result.getResponse().getContentAsString(), "$.data." + tokenName);
+	}
+
+	private String signedJwtWithoutTokenUse() {
+		Instant now = Instant.now();
+		JwtClaimsSet claims = JwtClaimsSet.builder()
+				.issuer("fintech-auth-service")
+				.issuedAt(now)
+				.expiresAt(now.plusSeconds(900))
+				.subject(UUID.randomUUID().toString())
+				.claim("email", "customer@example.com")
+				.claim("roles", java.util.List.of("CUSTOMER"))
+				.build();
+
+		return jwtEncoder.encode(JwtEncoderParameters.from(
+				JwsHeader.with(MacAlgorithm.HS256).build(),
+				claims)).getTokenValue();
 	}
 
 	private String randomEmail() {

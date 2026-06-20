@@ -15,6 +15,10 @@ import org.springframework.stereotype.Component;
 @Component
 public class JwtTokenProvider {
 
+    public static final String TOKEN_USE_ACCESS = "access";
+
+    private static final String ROLE_SCOPE_PREFIX = "ROLE_";
+
     private final JwtEncoder jwtEncoder;
     private final JwtDecoder jwtDecoder;
     private final JwtProperties properties;
@@ -31,6 +35,9 @@ public class JwtTokenProvider {
                 .map(role -> role.getName())
                 .sorted()
                 .toList();
+        String scopes = String.join(" ", roles.stream()
+                .map(role -> ROLE_SCOPE_PREFIX + role)
+                .toList());
 
         JwtClaimsSet claims = JwtClaimsSet.builder()
                 .issuer(properties.issuer())
@@ -39,6 +46,8 @@ public class JwtTokenProvider {
                 .subject(user.getId().toString())
                 .claim("email", user.getEmail())
                 .claim("roles", roles)
+                .claim("scope", scopes)
+                .claim("token_use", TOKEN_USE_ACCESS)
                 .build();
 
         JwsHeader header = JwsHeader.with(MacAlgorithm.HS256).build();
